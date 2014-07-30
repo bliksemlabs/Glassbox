@@ -33,8 +33,8 @@ def fare_for_section(fare_section,first_section=False):
     c = db.cursor()
     c.execute("""
 SELECT d.distance,fareunits,price_2ndfull,price_1stfull,
-       max(d.distance,d.min_distance) * c.price_first  as totalkmprice_1,
-       max(d.distance,d.min_distance) * c.price_second as totalkmprice_2,
+       max(d.distance,coalesce(d.min_distance,0)) * c.price_first  as totalkmprice_1,
+       max(d.distance,coalesce(d.min_distance,0)) * c.price_second as totalkmprice_2,
        c.price_first,
        c.price_second,
        min_fare,
@@ -60,6 +60,8 @@ WHERE from_station = ? AND to_station = ? AND operator = ?; """,(fare_section['f
         fare_section['_km-price_second'] = None
         return fare_section
     else:
+        print fare_section
+        print res[0]
         if first_section:
            totalkmprice_2 += entrance_fee
         if first_section and price_first != 'NULL':
@@ -68,7 +70,7 @@ WHERE from_station = ? AND to_station = ? AND operator = ?; """,(fare_section['f
             totalkmprice_1 = min_fare
         if min_fare != 'NULL' and min_fare > totalkmprice_2:
             totalkmprice_2 = min_fare
-        if price_first == 'NULL':
+        if price_first == 'NULL' or totalkmprice_1 is None:
             totalkmprice_1 = None
         else:
             fare_section['price_first'] = int(round(totalkmprice_1,0))
@@ -86,6 +88,9 @@ def calculate_fare_of_sections(journey):
     
     for i,section in enumerate(journey['faresections']):
         fare_section = fare_for_section(section,first_section=(i==0))
+        if fare_section is None:
+            print section
+            raise Exception('fare not found')
         journey['fare_distance'] += section['fare_distance']
         journey['price_second'] += section['price_second']
         if 'price_first' in section:
@@ -131,8 +136,8 @@ def apply_discount(journey):
         fareunits_passed += fare_section['fare_distance']
         journey['price_second'] += fare_section['price_second']
         journey['price_first'] += fare_section['price_first']
-        for key,value in fare_section.items() : 
-            if key.startswith('_') : del fare_section[key] #Remove hidden values
+        #for key,value in fare_section.items() : 
+            #if key.startswith('_') : del fare_section[key] #Remove hidden values
     return journey
 
 """
@@ -160,7 +165,7 @@ def calculate_journey(from_station,to_station):
            reisstops = reisdeel.findall(".//ReisStop")
            section = {'fromStation' : reisstops[0].find('Code').text.lower(),
                       'toStation'   : reisstops[-1].find('Code').text.lower(),
-                      'operator'    : reisdeel.find('Vervoerder').text.replace('Arriva','ARR').replace('Syntus','SYNTUS').replace('Valleilijn','CXX').replace('NS International','NS').replace('GVB','NS').replace('R-net','NS').replace('Veolia','VTN')}
+                      'operator'    : reisdeel.find('Vervoerder').text.replace('Arriva','ARR').replace('Syntus','SYNTUS').replace('Valleilijn','CXX').replace('NS International','NS').replace('GVB','NS').replace('R-net','NS').replace('Breng','BRENG').replace('Veolia','VTN')}
            journey['sections'].append(section)
         fare = calculate_fare(journey)
         print '------------------'
