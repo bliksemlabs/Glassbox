@@ -60,8 +60,6 @@ WHERE from_station = ? AND to_station = ? AND operator = ?; """,(fare_section['f
         fare_section['_km-price_second'] = None
         return fare_section
     else:
-        print fare_section
-        print res[0]
         if first_section:
            totalkmprice_2 += entrance_fee
         if first_section and price_first != 'NULL':
@@ -98,6 +96,12 @@ def calculate_fare_of_sections(journey):
         else:
             journey['price_first'] += section['price_second']
 
+def unitprice(distance):
+    c = db.cursor()
+    c.execute("""
+SELECT price_1stfull,price_2ndfull FROM fareunit_price WHERE distance = ? or (? > 250 and distance = 250)""",(distance,)*2)
+    return c.fetchone()
+
 def lak(after_fareunits):
     if after_fareunits <= 40:
         return 1
@@ -124,8 +128,10 @@ def apply_discount(journey):
     for i,fare_section in enumerate(journey['faresections']):
         if i != 0:
             if fare_section['_fare_units']:
-                fare_section['price_second'] *= lak(fareunits_passed)
-                fare_section['price_first'] *= lak(fareunits_passed)
+                first_full,second_full = unitprice(fareunits_passed+fare_section['fare_distance'])
+                first_passed,second_passed = unitprice(fareunits_passed)
+                fare_section['price_second'] = second_full-second_passed
+                fare_section['price_first'] = first_full-first_passed
             else:
                 km_price_second = fare_section['_km-price_second'] * lak(fareunits_passed)
                 fare_section['price_second'] = int(km_price_second * fare_section['fare_distance'])
@@ -169,12 +175,17 @@ def calculate_journey(from_station,to_station):
            journey['sections'].append(section)
         fare = calculate_fare(journey)
         print '------------------'
-        print fare
         for prijs in reismogelijkheid.findall(".//Prijs"):
             if prijs.get('korting') != '0':
                 continue
-            print 'Klasse '+ prijs.get('klasse') + ' Korting '+prijs.get('korting') + ' prijs '+prijs.text
-        print '------------------'
+            second_matches=False
+            first_matches=False
+            if prijs.get('klasse') == '1':
+                ns_prijs = int(float(prijs.text)*100)
+                print 'NS-prijs %s Eigenprijs %s Match = %s, diff %s' % (ns_prijs,fare['price_first'],ns_prijs==fare['price_first'],ns_prijs-fare['price_first'])
+            if prijs.get('klasse') == '2':
+                ns_prijs = int(float(prijs.text)*100)
+                print 'NS-prijs %s Eigenprijs %s Match = %s, diff %s' % (ns_prijs,fare['price_second'],ns_prijs==fare['price_second'],ns_prijs-fare['price_second'])
             
 
 calculate_journey(sys.argv[1],sys.argv[2])
