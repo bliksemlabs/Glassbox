@@ -29,16 +29,21 @@ def sections_to_faresections(journey):
     fare_sections.append( {'fromStation' : from_station, 'toStation' : to_station, 'operator' : last_operator} )
     return fare_sections
 
+def unitprice(distance):
+    c = db.cursor()
+    c.execute("""
+SELECT price_1stfull,price_2ndfull FROM fareunit_price WHERE distance = ? or (? > 250 and distance = 250)""",(distance,)*2)
+    return c.fetchone()
+
 def fare_for_section(fare_section,first_section=False):
     c = db.cursor()
     c.execute("""
 SELECT d.distance,fareunits,price_2ndfull,price_1stfull,
-       max(d.distance,coalesce(d.min_distance,0)) * c.price_first  as totalkmprice_1,
-       max(d.distance,coalesce(d.min_distance,0)) * c.price_second as totalkmprice_2,
        c.price_first,
        c.price_second,
        min_fare,
-       entrance_fee
+       entrance_fee,
+       coalesce(min_distance,0)
 FROM distance d JOIN fareunit_price fp ON (fp.distance = d.distance OR (fp.distance = 250 AND d.distance > 250))
                 JOIN concession c USING (concession)
 WHERE from_station = ? AND to_station = ? AND operator = ?; """,(fare_section['fromStation'],
@@ -49,102 +54,48 @@ WHERE from_station = ? AND to_station = ? AND operator = ?; """,(fare_section['f
         return None #No fare found
     if len(res) > 1:
         raise Exception('NS Multiple fares found')
-    distance,fareunits,price_2ndfull,price_1stfull,totalkmprice_1,totalkmprice_2,price_first,price_second,min_fare,entrance_fee = res[0]
+    distance,fareunits,price_2ndfull,price_1stfull,price_first,price_second,min_fare,entrance_fee,min_distance = res[0]
     c.close()
     if fareunits:
-        fare_section['price_first'] = price_1stfull
-        fare_section['price_second'] = price_2ndfull
-        fare_section['fare_distance'] = distance
-        fare_section['_fare_units'] = True
-        fare_section['_km-price_first'] = None
-        fare_section['_km-price_second'] = None
-        return fare_section
+        return (True,distance,price_1stfull,price_2ndfull,None,None,None,None,None)
     else:
-        if first_section:
-           totalkmprice_2 += entrance_fee
-        if first_section and price_first != 'NULL':
-           totalkmprice_1 += entrance_fee
-        if min_fare != 'NULL' and min_fare > totalkmprice_1:
-            totalkmprice_1 = min_fare
-        if min_fare != 'NULL' and min_fare > totalkmprice_2:
-            totalkmprice_2 = min_fare
-        if price_first == 'NULL' or totalkmprice_1 is None:
-            totalkmprice_1 = None
-        else:
-            fare_section['price_first'] = int(round(totalkmprice_1,0))
-        fare_section['price_second'] = int(round(totalkmprice_2,0))
-        fare_section['fare_distance'] = distance
-        fare_section['_fare_units'] = False
-        fare_section['_km-price_first'] = price_first
-        fare_section['_km-price_second'] = price_second
-        return fare_section
+        if price_first is None or price_first == 'NULL':
+            price_first = None
+        return (False,distance,None,None,price_first,price_second,int(entrance_fee),min_fare,min_distance)
 
-def calculate_fare_of_sections(journey):
-    journey['fare_distance'] = 0
-    journey['price_second'] = 0
-    journey['price_first'] = 0
-    
-    for i,section in enumerate(journey['faresections']):
-        fare_section = fare_for_section(section,first_section=(i==0))
-        if fare_section is None:
-            print section
-            raise Exception('fare not found')
-        journey['fare_distance'] += section['fare_distance']
-        journey['price_second'] += section['price_second']
-        if 'price_first' in section:
-            journey['price_first'] += section['price_first']
-        else:
-            journey['price_first'] += section['price_second']
-
-def unitprice(distance):
-    c = db.cursor()
-    c.execute("""
-SELECT price_1stfull,price_2ndfull FROM fareunit_price WHERE distance = ? or (? > 250 and distance = 250)""",(distance,)*2)
-    return c.fetchone()
-
-def lak(after_fareunits):
-    if after_fareunits <= 40:
+def lak_factor(ceiling):
+    if ceiling <= 40:
         return 1
-    elif after_fareunits <= 80:
+    elif ceiling <= 80:
         return 0.9680
-    elif after_fareunits <= 100:
+    elif ceiling <= 100:
         return 0.8470
-    elif after_fareunits <= 120:
+    elif ceiling <= 120:
         return 0.7
-    elif after_fareunits <= 150:
+    elif ceiling <= 150:
         return 0.48
-    elif after_fareunits <= 200:
+    elif ceiling <= 200:
         return 0.4
-    elif after_fareunits <= 250:
+    elif ceiling <= 250:
         return 0.15
-    elif after_fareunits > 250:
+    elif ceiling > 250:
         return 0
 
-def apply_discount(journey):
-    fareunits_passed = 0
-    journey['price_second'] = 0
-    journey['price_first'] = 0
+def compute_total_km_fare(km_price,distance,units_passed):
+    fare = 0.0
+    for stage_ceiling in [40,80,100,120,150,200,250]:
+        if distance == 0:
+            break
+        capacity = stage_ceiling-units_passed
+        if capacity < 0:
+            continue
+        fare += lak_factor(stage_ceiling)*km_price*min(capacity,distance)
+        distance -= min(capacity,distance)
+    #Above 250 free
+    return fare
 
-    for i,fare_section in enumerate(journey['faresections']):
-        if i != 0:
-            if fare_section['_fare_units']:
-                first_full,second_full = unitprice(fareunits_passed+fare_section['fare_distance'])
-                first_passed,second_passed = unitprice(fareunits_passed)
-                fare_section['price_second'] = second_full-second_passed
-                fare_section['price_first'] = first_full-first_passed
-            else:
-                km_price_second = fare_section['_km-price_second'] * lak(fareunits_passed)
-                fare_section['price_second'] = int(km_price_second * fare_section['fare_distance'])
-
-                km_price_first = fare_section['_km-price_first'] * lak(fareunits_passed)
-                fare_section['price_first'] = int(km_price_first * fare_section['fare_distance'])
-
-        fareunits_passed += fare_section['fare_distance']
-        journey['price_second'] += fare_section['price_second']
-        journey['price_first'] += fare_section['price_first']
-        #for key,value in fare_section.items() : 
-            #if key.startswith('_') : del fare_section[key] #Remove hidden values
-    return journey
+def magic_round(price,operator):
+    return int(round(price))    
 
 """
 Input a journey, a list of sections. A section is a dict, containing fromStation, toStation, operator.
@@ -152,12 +103,42 @@ Stationcodes have to be lowercase
 """
 def calculate_fare(journey):
     journey['faresections'] = sections_to_faresections(journey['sections'])
-    calculate_fare_of_sections(journey)
-    if len(journey['faresections']) == 1:
-        for key,value in journey['faresections'][0].items() : 
-            if key.startswith('_') : del journey['faresections'][0][key] #Remove hidden values
-        return journey
-    return apply_discount(journey)
+    fareunits_passed = 0
+    price_second = 0
+    price_first = 0
+    for i,fare_section in enumerate(journey['faresections']):
+        fare_unit,distance,price_1stfull,price_2ndfull,kmprice_first,kmprice_second,entrance_free,min_fare,min_distance = fare_for_section(fare_section)
+        fare_section['fare_distance'] = distance
+        if fare_unit:
+            if fareunits_passed > 0:
+                complete_1stfull,complete_2ndfull = unitprice(distance+fareunits_passed)
+                passed_1stfull,passed_2ndfull = unitprice(fareunits_passed)
+                fare_section['price_first'] = complete_1stfull-passed_1stfull
+                fare_section['price_second'] = complete_2ndfull-passed_2ndfull
+            else:
+                fare_section['price_first'] = price_1stfull
+                fare_section['price_second'] = price_2ndfull
+        else:
+            section_distance = distance
+            if distance+fareunits_passed < min_distance:
+                section_distance = min_distance
+            if kmprice_first is None: #No known KM price for 1st class, fallback to 2nd
+                fare_section['price_first']  = magic_round(compute_total_km_fare(kmprice_second,section_distance,fareunits_passed),fare_section['operator'])
+            else:
+                fare_section['price_first']  = magic_round(compute_total_km_fare(kmprice_first,section_distance,fareunits_passed),fare_section['operator'])
+            fare_section['price_second'] = magic_round(compute_total_km_fare(kmprice_second,section_distance,fareunits_passed),fare_section['operator'])
+            if i==0:
+                fare_section['price_first'] += entrance_free
+                fare_section['price_second'] += entrance_free
+
+        fareunits_passed += fare_section['fare_distance']
+        price_first += fare_section['price_first']
+        price_second += fare_section['price_second']
+
+    journey['fare_distance'] = fareunits_passed
+    journey['price_second'] = price_second
+    journey['price_first'] = price_first
+    return journey
 
 def calculate_journey(from_station,to_station):
     url = 'http://ews-rpx.ns.nl/mobile-api-planner?fromStation=%s&toStation=%s&departure=true&dateTime=2014-09-11T18:23&previousAdvices=6&nextAdvices=6&passing=true' % (from_station,to_station)
@@ -175,17 +156,18 @@ def calculate_journey(from_station,to_station):
            journey['sections'].append(section)
         fare = calculate_fare(journey)
         print '------------------'
+        print fare
         for prijs in reismogelijkheid.findall(".//Prijs"):
             if prijs.get('korting') != '0':
                 continue
             second_matches=False
             first_matches=False
             if prijs.get('klasse') == '1':
-                ns_prijs = int(float(prijs.text)*100)
-                print 'NS-prijs %s Eigenprijs %s Match = %s, diff %s' % (ns_prijs,fare['price_first'],ns_prijs==fare['price_first'],ns_prijs-fare['price_first'])
+                ns_prijs = int(round(float(prijs.text)*100))
+                print '1: NS-prijs %s Eigenprijs %s Match = %s, diff %s' % (ns_prijs,fare['price_first'],ns_prijs==fare['price_first'],ns_prijs-fare['price_first'])
             if prijs.get('klasse') == '2':
-                ns_prijs = int(float(prijs.text)*100)
-                print 'NS-prijs %s Eigenprijs %s Match = %s, diff %s' % (ns_prijs,fare['price_second'],ns_prijs==fare['price_second'],ns_prijs-fare['price_second'])
+                ns_prijs = int(round(float(prijs.text)*100))
+                print '2: NS-prijs %s Eigenprijs %s Match = %s, diff %s' % (ns_prijs,fare['price_second'],ns_prijs==fare['price_second'],ns_prijs-fare['price_second'])
             
 
 calculate_journey(sys.argv[1],sys.argv[2])
