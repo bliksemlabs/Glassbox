@@ -61,6 +61,10 @@ WHERE from_station = ? AND to_station = ? AND operator = ?; """,(fare_section['f
     else:
         if price_first is None or price_first == 'NULL':
             price_first = None
+        if min_fare is None or min_fare == 'NULL':
+            min_fare = None
+        if min_distance is None or min_distance == 'NULL':
+            min_distance = None
         return (False,distance,None,None,price_first,price_second,int(entrance_fee),min_fare,min_distance)
 
 def lak_factor(ceiling):
@@ -123,16 +127,25 @@ def calculate_fare(journey):
                 fare_section['price_second'] = price_2ndfull
         else:
             section_distance = distance
-            if distance+fareunits_passed < min_distance:
-                section_distance = min_distance
-            if kmprice_first is None: #No known KM price for 1st class, fallback to 2nd
-                fare_section['price_first']  = magic_round(compute_total_km_fare(kmprice_second,section_distance,fareunits_passed),fare_section['operator'])
+
+            if i==0 and min_fare is None:
+                fare_section['price_first'] = entrance_free
+                fare_section['price_second'] = entrance_free
             else:
-                fare_section['price_first']  = magic_round(compute_total_km_fare(kmprice_first,section_distance,fareunits_passed),fare_section['operator'])
-            fare_section['price_second'] = magic_round(compute_total_km_fare(kmprice_second,section_distance,fareunits_passed),fare_section['operator'])
-            if i==0:
-                fare_section['price_first'] += entrance_free
-                fare_section['price_second'] += entrance_free
+                fare_section['price_first'] = 0
+                fare_section['price_second'] = 0
+
+            if min_distance is not None and min_fare is not None:
+               section_distance = max(section_distance-min_distance,0)
+               fare_section['price_second'] += min_fare
+            elif distance+fareunits_passed < min_distance:
+                section_distance = min_distance
+
+            if kmprice_first is None: #No known KM price for 1st class, fallback to 2nd
+                fare_section['price_first']  += magic_round(compute_total_km_fare(kmprice_second,section_distance,fareunits_passed),fare_section['operator'])
+            else:
+                fare_section['price_first']  += magic_round(compute_total_km_fare(kmprice_first,section_distance,fareunits_passed),fare_section['operator'])
+            fare_section['price_second'] += magic_round(compute_total_km_fare(kmprice_second,section_distance,fareunits_passed),fare_section['operator'])
 
         fareunits_passed += fare_section['fare_distance']
         price_first += fare_section['price_first']
