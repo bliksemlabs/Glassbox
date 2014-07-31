@@ -86,15 +86,18 @@ def compute_total_km_fare(km_price,distance,units_passed):
     for stage_ceiling in [40,80,100,120,150,200,250]:
         if distance == 0:
             break
-        capacity = stage_ceiling-units_passed
+        capacity = stage_ceiling - units_passed
         if capacity < 0:
             continue
         fare += lak_factor(stage_ceiling)*km_price*min(capacity,distance)
         distance -= min(capacity,distance)
+        units_passed += min(capacity,distance)
     #Above 250 free
     return fare
 
 def magic_round(price,operator):
+    if operator == 'VTN':
+        return int(price)
     return int(round(price))    
 
 """
