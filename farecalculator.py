@@ -23,10 +23,6 @@ THE SOFTWARE.
 """
 
 import sqlite3
-import urllib2
-import lxml
-import xml.etree.cElementTree as ET
-from lxml import etree
 import sys
 import math
 
@@ -180,35 +176,3 @@ def calculate_fare(journey):
     journey['price_second'] = price_second
     journey['price_first'] = price_first
     return journey
-
-def calculate_journey(from_station,to_station):
-    url = 'http://ews-rpx.ns.nl/mobile-api-planner?fromStation=%s&toStation=%s&departure=true&dateTime=2014-09-11T18:23&previousAdvices=6&nextAdvices=6&passing=true' % (from_station,to_station)
-    req = urllib2.Request(url)
-    req.add_header("Authorization", "Basic %s" % 'YW5kcm9pZDptdmR6aWc=')
-    response = urllib2.urlopen(req)
-    root = etree.parse(response)
-    for reismogelijkheid in root.findall(".//ReisMogelijkheid"):
-        journey = {'sections' : []}
-        for reisdeel in reismogelijkheid.findall(".//ReisDeel"):
-           reisstops = reisdeel.findall(".//ReisStop")
-           section = {'fromStation' : reisstops[0].find('Code').text.lower(),
-                      'toStation'   : reisstops[-1].find('Code').text.lower(),
-                      'operator'    : reisdeel.find('Vervoerder').text.replace('Arriva','ARR').replace('Syntus','SYNTUS').replace('Valleilijn','CXX').replace('NS International','NS').replace('GVB','NS').replace('R-net','NS').replace('Breng','BRENG').replace('Veolia','VTN')}
-           journey['sections'].append(section)
-        fare = calculate_fare(journey)
-        print '------------------'
-        print fare
-        for prijs in reismogelijkheid.findall(".//Prijs"):
-            if prijs.get('korting') != '0':
-                continue
-            second_matches=False
-            first_matches=False
-            if prijs.get('klasse') == '1':
-                ns_prijs = int(round(float(prijs.text)*100))
-                print '1: NS-prijs %s Eigenprijs %s Match = %s, diff %s' % (ns_prijs,fare['price_first'],ns_prijs==fare['price_first'],ns_prijs-fare['price_first'])
-            if prijs.get('klasse') == '2':
-                ns_prijs = int(round(float(prijs.text)*100))
-                print '2: NS-prijs %s Eigenprijs %s Match = %s, diff %s' % (ns_prijs,fare['price_second'],ns_prijs==fare['price_second'],ns_prijs-fare['price_second'])
-            
-if __name__ == "__main__":
-    calculate_journey(sys.argv[1],sys.argv[2])
