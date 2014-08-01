@@ -186,5 +186,5 @@ def calculate_journey(from_station,to_station):
                 ns_prijs = int(round(float(prijs.text)*100))
                 print '2: NS-prijs %s Eigenprijs %s Match = %s, diff %s' % (ns_prijs,fare['price_second'],ns_prijs==fare['price_second'],ns_prijs-fare['price_second'])
             
-
-calculate_journey(sys.argv[1],sys.argv[2])
+if __name__ == "__main__":
+    calculate_journey(sys.argv[1],sys.argv[2])
