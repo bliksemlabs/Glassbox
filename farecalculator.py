@@ -156,16 +156,14 @@ def calculate_fare(journey):
                 fare_section['price_second'] = 0
 
             if fareunits_passed == 0 and min_distance is not None and min_fare is not None: #Valleilijn hack, and how the F# is this portable to first class?
-               section_distance = max(section_distance-min_distance,0)
+               section_distance = max(section_distance-min_distance+1,0)
+               x,min_fare = unitprice(min_distance)
                fare_section['price_second'] += min_fare
                fare_section['price_first'] += int(min_fare*1.7)
             elif distance+fareunits_passed < min_distance:
                 section_distance = min_distance
 
-            if kmprice_first is None: #No known KM price for 1st class, fallback to 2nd
-                fare_section['price_first']  += magic_round(compute_total_km_fare(kmprice_second,section_distance,fareunits_passed),fare_section['operator'])
-            else:
-                fare_section['price_first']  += magic_round(compute_total_km_fare(kmprice_first,section_distance,fareunits_passed),fare_section['operator'])
+            fare_section['price_first']  += magic_round(compute_total_km_fare(kmprice_first,section_distance,fareunits_passed),fare_section['operator'])
             fare_section['price_second'] += magic_round(compute_total_km_fare(kmprice_second,section_distance,fareunits_passed),fare_section['operator'])
 
         fareunits_passed += fare_section['fare_distance']
