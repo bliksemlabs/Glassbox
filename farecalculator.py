@@ -138,6 +138,7 @@ def calculate_fare(journey):
             if fareunits_passed == 0 and min_distance is not None and min_fare is not None: #Valleilijn hack, and how the F# is this portable to first class?
                section_distance = max(section_distance-min_distance,0)
                fare_section['price_second'] += min_fare
+               fare_section['price_first'] += int(min_fare*1.7)
             elif distance+fareunits_passed < min_distance:
                 section_distance = min_distance
 
