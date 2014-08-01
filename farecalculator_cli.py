@@ -27,11 +27,12 @@ def load_stations():
 
 def calculate_journey(from_station,to_station):
     load_stations()
-    url = 'http://webservices.ns.nl/ns-api-treinplanner?fromStation=%s&toStation=%s' % (from_station,to_station)
+    url = 'http://webservices.ns.nl/ns-api-treinplanner?fromStation=%s&toStation=%s&previousAdvices=5&nextAdvices=5' % (from_station,to_station)
     req = urllib2.Request(url)
     req.add_header("Authorization", "Basic %s" % authorization)
     response = urllib2.urlopen(req)
     root = etree.parse(response)
+    fare_sections_printed = set([])
     for reismogelijkheid in root.findall(".//ReisMogelijkheid"):
         journey = {'sections' : []}
         for reisdeel in reismogelijkheid.findall(".//ReisDeel"):
@@ -41,6 +42,9 @@ def calculate_journey(from_station,to_station):
                       'operator'    : reisdeel.find('Vervoerder').text.replace('Arriva','ARR').replace('Syntus','SYNTUS').replace('Valleilijn','CXX').replace('NS International','NS').replace('GVB','NS').replace('R-net','NS').replace('Breng','BRENG').replace('Veolia','VTN')}
            journey['sections'].append(section)
         fare = calculate_fare(journey)
+        if str(fare['faresections']) in fare_sections_printed:
+            continue
+        fare_sections_printed.add(str(fare['faresections']))
         print '------------------'
         for fare_section in journey['faresections']:
             print '% 10s % 10s % 5s 1eklas %5.2f    2eklas %5.2f' % (fare_section['fromStation'],
