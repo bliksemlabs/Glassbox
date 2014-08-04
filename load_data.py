@@ -37,6 +37,25 @@ for line in open('unitprices.csv'):
 
 c.execute(
 """
+CREATE TABLE arr_fareunit_price (
+distance integer,
+price_2ndfull integer,
+price_2nd20 integer,
+price_2nd40 integer,
+price_1stfull integer,
+price_1st20 integer,
+price_1st40 integer
+);""")
+c.execute("CREATE INDEX arr_fareunit_price_idx on arr_fareunit_price(distance);")
+for line in open('arr_unitprices.csv'):
+    values = line[:-1].split(',')
+    for i,v in enumerate(values):
+        if v == 'NULL':
+            values[i] = None
+    c.execute("INSERT INTO arr_fareunit_price VALUES (?,?,?,?,?,?,?)",values)
+
+c.execute(
+"""
 CREATE TABLE concession (
 concession TEXT,
 fareunits boolean,
