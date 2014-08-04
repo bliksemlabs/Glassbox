@@ -83,12 +83,6 @@ WHERE from_station = ? AND to_station = ? AND operator = ?; """,(fare_section['f
     if fareunits:
         return (True,distance,price_1stfull,price_2ndfull,None,None,None,None,None,concession)
     else:
-        if price_first is None or price_first == 'NULL':
-            price_first = None
-        if min_fare is None or min_fare == 'NULL':
-            min_fare = None
-        if min_distance is None or min_distance == 'NULL':
-            min_distance = None
         return (False,distance,None,None,price_first,price_second,int(entrance_fee),min_fare,min_distance,concession)
 
 #Return the LAK discount factor for the distance given
