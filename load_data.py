@@ -14,6 +14,9 @@ c.execute("CREATE TABLE distance ( from_station TEXT, to_station TEXT, distance 
 c.execute("CREATE index distance_idx ON DISTANCE (from_station,to_station);")
 for line in open('distance.csv'):
     values = line[:-1].split(',')
+    for i,v in enumerate(values):
+        if v == 'NULL':
+            values[i] = None
     if values[4] == '' : values[4] = None
     c.execute("INSERT INTO distance VALUES (?,?,?,?,?)",values)
 
@@ -31,6 +34,9 @@ price_1st40 integer
 c.execute("CREATE INDEX fareunit_price_idx on fareunit_price(distance);")
 for line in open('unitprices.csv'):
     values = line[:-1].split(',')
+    for i,v in enumerate(values):
+        if v == 'NULL':
+            values[i] = None
     c.execute("INSERT INTO fareunit_price VALUES (?,?,?,?,?,?,?)",values)
 
 c.execute(
@@ -46,6 +52,9 @@ min_fare integer
 c.execute("CREATE INDEX concession_idx ON concession(concession);")
 for line in open('prices.csv'):
     values = line[:-1].split(',')
+    for i,v in enumerate(values):
+        if v == 'NULL':
+            values[i] = None
     c.execute("INSERT INTO concession VALUES (?,?,?,?,?,?)",values)
 
 #SET CONCESSIONS
@@ -103,6 +112,7 @@ c.execute("""
 UPDATE distance set concession  = 'SYNTUS_ZOH' WHERE operator = 'SYNTUS' AND (to_station = 'hgl' OR from_station = 'hgl');""")
 c.execute("""UPDATE distance set concession  = 'SYNTUS_ZOH' WHERE operator = 'SYNTUS' and to_station in 
 (SELECT DISTINCT to_station  FROM distance WHERE operator = 'SYNTUS' and from_station = 'hgl');""")
+
 
 db.commit()
 c.close()
