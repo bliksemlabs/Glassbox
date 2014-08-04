@@ -28,6 +28,7 @@ import math
 
 db = sqlite3.connect('data.db')
 
+#Transform a journey into faresections per operator.
 def sections_to_faresections(journey):
     fare_sections = []
 
@@ -49,12 +50,15 @@ def sections_to_faresections(journey):
     fare_sections.append( {'fromStation' : from_station, 'toStation' : to_station, 'operator' : last_operator} )
     return fare_sections
 
+#Return NS firstclass,secondclass unit price for distance given
 def unitprice(distance):
     c = db.cursor()
     c.execute("""
 SELECT price_1stfull,price_2ndfull FROM fareunit_price WHERE distance = ? or (? > 250 and distance = 250)""",(distance,)*2)
     return c.fetchone()
 
+#Return distance,whether fare units used, 2nd class fareunits price, 1st class fareunits price, KM-price first, KM-price second,
+# minimum fare in concession, entrance fee for concession, minimum distance and the name of the concession for the fare_section
 def fare_for_section(fare_section,first_section=False):
     c = db.cursor()
     c.execute("""
@@ -63,7 +67,7 @@ SELECT d.distance,fareunits,price_2ndfull,price_1stfull,
        c.price_second,
        min_fare,
        entrance_fee,
-       coalesce(min_distance,0)
+       coalesce(min_distance,0),concession
 FROM distance d JOIN fareunit_price fp ON (fp.distance = d.distance OR (fp.distance = 250 AND d.distance > 250))
                 JOIN concession c USING (concession)
 WHERE from_station = ? AND to_station = ? AND operator = ?; """,(fare_section['fromStation'],
@@ -74,10 +78,10 @@ WHERE from_station = ? AND to_station = ? AND operator = ?; """,(fare_section['f
         return None #No fare found
     if len(res) > 1:
         raise Exception('NS Multiple fares found')
-    distance,fareunits,price_2ndfull,price_1stfull,price_first,price_second,min_fare,entrance_fee,min_distance = res[0]
+    distance,fareunits,price_2ndfull,price_1stfull,price_first,price_second,min_fare,entrance_fee,min_distance,concession = res[0]
     c.close()
     if fareunits:
-        return (True,distance,price_1stfull,price_2ndfull,None,None,None,None,None)
+        return (True,distance,price_1stfull,price_2ndfull,None,None,None,None,None,concession)
     else:
         if price_first is None or price_first == 'NULL':
             price_first = None
@@ -85,26 +89,28 @@ WHERE from_station = ? AND to_station = ? AND operator = ?; """,(fare_section['f
             min_fare = None
         if min_distance is None or min_distance == 'NULL':
             min_distance = None
-        return (False,distance,None,None,price_first,price_second,int(entrance_fee),min_fare,min_distance)
+        return (False,distance,None,None,price_first,price_second,int(entrance_fee),min_fare,min_distance,concession)
 
-def lak_factor(ceiling):
-    if ceiling <= 40:
+#Return the LAK discount factor for the distance given
+def lak_factor(distance):
+    if distance <= 40:
         return 1
-    elif ceiling <= 80:
+    elif distance <= 80:
         return 0.9680
-    elif ceiling <= 100:
+    elif distance <= 100:
         return 0.8470
-    elif ceiling <= 120:
+    elif distance <= 120:
         return 0.7
-    elif ceiling <= 150:
+    elif distance <= 150:
         return 0.48
-    elif ceiling <= 200:
+    elif distance <= 200:
         return 0.4
-    elif ceiling <= 250:
+    elif distance <= 250:
         return 0.15
-    elif ceiling > 250:
+    elif distance > 250:
         return 0
 
+#Compute the total fare using KM price, using LAK distance stages
 def compute_total_km_fare(km_price,distance,units_passed):
     fare = 0.0
     for stage_ceiling in [40,80,100,120,150,200,250]:
@@ -132,7 +138,7 @@ def calculate_fare(journey):
     price_second = 0
     price_first = 0
     for i,fare_section in enumerate(journey['faresections']):
-        fare_unit,distance,price_1stfull,price_2ndfull,kmprice_first,kmprice_second,entrance_free,min_fare,min_distance = fare_for_section(fare_section)
+        fare_unit,distance,price_1stfull,price_2ndfull,kmprice_first,kmprice_second,entrance_free,min_fare,min_distance,concession = fare_for_section(fare_section)
         fare_section['fare_distance'] = distance
         if fare_unit:
             if fareunits_passed > 0:
