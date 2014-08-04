@@ -120,8 +120,6 @@ def compute_total_km_fare(km_price,distance,units_passed):
     return fare
 
 def magic_round(price,operator):
-    if operator == 'VTN':
-        return int(price)
     return int(round(price))    
 
 """
