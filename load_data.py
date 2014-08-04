@@ -14,11 +14,7 @@ c.execute("CREATE TABLE distance ( from_station TEXT, to_station TEXT, distance 
 c.execute("CREATE index distance_idx ON DISTANCE (from_station,to_station);")
 for line in open('distance.csv'):
     values = line[:-1].split(',')
-    for i,v in enumerate(values):
-        if v == 'NULL':
-            values[i] = None
-    if values[4] == '' : values[4] = None
-    c.execute("INSERT INTO distance VALUES (?,?,?,?,?)",values)
+    c.execute("INSERT INTO distance (from_station,to_station, distance, operator) VALUES (?,?,?,?)",values)
 
 c.execute(
 """
@@ -106,6 +102,7 @@ c.execute("""
 UPDATE distance set concession  = 'VALLEI' WHERE operator = 'CXX' and (from_station = 'bnc' or to_station = 'bnc');""")
 c.execute("""UPDATE distance set concession  = 'VALLEI' WHERE operator = 'CXX' and to_station in 
 (SELECT DISTINCT to_station  FROM distance WHERE operator = 'CXX' and from_station = 'bnc');""")
+c.execute("""UPDATE distance set min_distance = 9 WHERE concession = 'VALLEI';""")
 
 #Syntus ZOH
 c.execute("""
