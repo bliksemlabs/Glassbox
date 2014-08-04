@@ -138,7 +138,7 @@ def calculate_fare(journey):
         fare_unit,distance,price_1stfull,price_2ndfull,kmprice_first,kmprice_second,entrance_free,min_fare,min_distance,concession = fare_for_section(fare_section)
         fare_section['fare_distance'] = distance
         if fare_unit:
-            if fareunits_passed > 0:
+            if i != 0:
                 complete_1stfull,complete_2ndfull = unitprice(distance+fareunits_passed)
                 passed_1stfull,passed_2ndfull = unitprice(fareunits_passed)
                 fare_section['price_first'] = complete_1stfull-passed_1stfull
