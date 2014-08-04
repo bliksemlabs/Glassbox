@@ -116,6 +116,8 @@ UPDATE distance set concession  = 'LIM_NOORD' WHERE operator = 'VTN' and (from_s
 c.execute("""UPDATE distance set concession  = 'LIM_NOORD' WHERE operator = 'VTN' and to_station in 
 (SELECT DISTINCT to_station  FROM distance WHERE operator = 'VTN' and from_station = 'rm');""")
 
+c.execute("""UPDATE distance set min_distance = 6 WHERE concession like 'LIM_%';""")
+
 #Valleilijn
 c.execute("""
 UPDATE distance set concession  = 'VALLEI' WHERE operator = 'CXX' and (from_station = 'bnc' or to_station = 'bnc');""")
