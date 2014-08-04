@@ -79,6 +79,9 @@ WHERE from_station = ? AND to_station = ? AND operator = ?; """,(fare_section['f
     if len(res) > 1:
         raise Exception('NS Multiple fares found')
     distance,fareunits,price_2ndfull,price_1stfull,price_first,price_second,min_fare,entrance_fee,min_distance,concession = res[0]
+    if concession == 'NOORD':
+        c.execute("SELECT price_2ndfull,price_1stfull FROM arr_fareunit_price WHERE distance = ?",[distance])
+        price_2ndfull,price_1stfull = c.fetchone()
     c.close()
     if fareunits:
         return (True,distance,price_1stfull,price_2ndfull,None,None,None,None,None,concession)
@@ -160,7 +163,8 @@ def calculate_fare(journey):
                fare_section['price_first'] += int(min_fare*1.7)
             elif distance+fareunits_passed < min_distance:
                 section_distance = min_distance
-
+            if kmprice_first is None:
+                kmprice_first = kmprice_second
             fare_section['price_first']  += magic_round(compute_total_km_fare(kmprice_first,section_distance,fareunits_passed),fare_section['operator'])
             fare_section['price_second'] += magic_round(compute_total_km_fare(kmprice_second,section_distance,fareunits_passed),fare_section['operator'])
 
