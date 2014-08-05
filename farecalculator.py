@@ -50,43 +50,26 @@ def sections_to_faresections(journey):
     fare_sections.append( {'fromStation' : from_station, 'toStation' : to_station, 'operator' : last_operator} )
     return fare_sections
 
-#Return NS firstclass,secondclass unit price for distance given
-def unitprice(distance):
-    c = db.cursor()
-    c.execute("""
-SELECT price_1stfull,price_2ndfull FROM fareunit_price WHERE distance = ? or (? > 250 and distance = 250)""",(distance,)*2)
-    return c.fetchone()
-
 #Return distance,whether fare units used, 2nd class fareunits price, 1st class fareunits price, KM-price first, KM-price second,
 # minimum fare in concession, entrance fee for concession, minimum distance and the name of the concession for the fare_section
 def fare_for_section(fare_section,first_section=False):
     c = db.cursor()
     c.execute("""
-SELECT d.distance,fareunits,price_2ndfull,price_1stfull,
+SELECT d.distance,calc_method,
        c.price_first,
        c.price_second,
        min_fare,
        entrance_fee,
        coalesce(min_distance,0),concession
-FROM distance d JOIN fareunit_price fp ON (fp.distance = d.distance OR (fp.distance = 250 AND d.distance > 250))
-                JOIN concession c USING (concession)
+FROM distance d JOIN concession c USING (concession)
 WHERE from_station = ? AND to_station = ? AND operator = ?; """,(fare_section['fromStation'],
                                                                  fare_section['toStation'],
                                                                  fare_section['operator'])   )
     res = c.fetchall()
     if len(res) == 0:
         return None #No fare found
-    if len(res) > 1:
-        raise Exception('NS Multiple fares found')
-    distance,fareunits,price_2ndfull,price_1stfull,price_first,price_second,min_fare,entrance_fee,min_distance,concession = res[0]
-    if concession == 'NOORD':
-        c.execute("SELECT price_2ndfull,price_1stfull FROM arr_fareunit_price WHERE distance = ?",[distance])
-        price_2ndfull,price_1stfull = c.fetchone()
     c.close()
-    if fareunits:
-        return (True,distance,price_1stfull,price_2ndfull,None,None,None,None,None,concession)
-    else:
-        return (False,distance,None,None,price_first,price_second,int(entrance_fee),min_fare,min_distance,concession)
+    return res[0]
 
 #Return the LAK discount factor for the distance given
 def lak_factor(distance):
@@ -108,7 +91,7 @@ def lak_factor(distance):
         return 0
 
 #Compute the total fare using KM price, using LAK distance stages
-def compute_total_km_fare(km_price,distance,units_passed):
+def compute_km_fare(km_price,distance,units_passed):
     fare = 0.0
     for stage_ceiling in [40,80,100,120,150,200,250]:
         if distance == 0:
@@ -122,8 +105,39 @@ def compute_total_km_fare(km_price,distance,units_passed):
     #Above 250 free
     return fare
 
-def magic_round(price,operator):
-    return int(round(price))    
+def round_op(price,operator):
+    if operator == 'ARR':
+        return int(price)
+    return int(round(price))
+
+def fare_for_distance(distance,fareunits_passed,calc_method,km_price_first,km_price_second,min_distance,min_fare,entrance_rate,operator):
+    if calc_method == 'TE':
+        c = db.cursor()
+        c.execute("SELECT price_1stfull,price_2ndfull FROM fareunit_price WHERE distance = ? OR (? > 250 AND distance = 250)",(distance,)*2)
+        return c.fetchone()
+    elif calc_method == 'TE_ARR':
+        c = db.cursor()
+        c.execute("SELECT price_1stfull,price_2ndfull FROM arr_fareunit_price WHERE distance = ? OR (? > 250 AND distance = 250)",(distance,)*2)
+        return c.fetchone()
+    elif calc_method == 'EASY_TRIP':
+        distance = max(min_distance,distance)
+
+        price_first = entrance_rate + compute_km_fare(km_price_first,distance,fareunits_passed)
+        price_second = entrance_rate + compute_km_fare(km_price_second,distance,fareunits_passed)
+
+        return (round_op(price,operator) for price in (price_first,price_second))
+    elif calc_method == 'MIN_FARE': #Used on Valleilijn First x kilometers account for price y, rest (distance-x)*km_price
+        price_first,price_second = 0,0
+        
+        price_second += min_fare
+        price_first  += int(min_fare*1.7)
+        distance = max(0,distance-min_distance)
+        
+        price_second += distance * km_price_second
+        price_first += distance * km_price_first
+        return (round_op(price,operator) for price in (price_first,price_second))
+    else:
+        raise Exception("Unknown calculation method %s" % (calc_method))
 
 """
 Input a journey, a list of sections. A section is a dict, containing fromStation, toStation, operator.
@@ -138,54 +152,28 @@ def calculate_fare(journey):
         fare = fare_for_section(fare_section)
         if fare is None:
             print fare_section #Debug print
-        fare_unit,distance,price_1stfull,price_2ndfull,kmprice_first,kmprice_second,entrance_free,min_fare,min_distance,concession = fare
-        fare_section['fare_distance'] = distance
-        if fare_unit:
-            if i != 0:
-                complete_1stfull,complete_2ndfull = unitprice(distance+fareunits_passed)
-                passed_1stfull,passed_2ndfull = unitprice(fareunits_passed)
-                fare_section['price_first'] = complete_1stfull-passed_1stfull
-                fare_section['price_second'] = complete_2ndfull-passed_2ndfull
-            else:
-                fare_section['price_first'] = price_1stfull
-                fare_section['price_second'] = price_2ndfull
-        else:
-            section_distance = distance
-            
-            section_first = 0
-            section_second = 0
+        distance,calc_method,kmprice_first,kmprice_second,min_fare,entrance_fee,min_distance,concession = fare
+       
+        full_fare = fare_for_distance(distance+fareunits_passed,0,calc_method,
+                                      kmprice_first,kmprice_second,min_distance,
+                                      min_fare,entrance_fee,fare_section['operator'])
+        if full_fare is None:
+           raise Exception('FARE NOT FOUND')
+        full_first,full_second = full_fare
+        section_first,section_second = full_first,full_second
 
-            if i==0 and min_fare is None:
-                section_first  += entrance_free
-                section_second += entrance_free
+        if i > 0:
+            passed_fare = fare_for_distance(fareunits_passed,0,calc_method,
+                                            kmprice_first,kmprice_second,min_distance,
+                                            min_fare,entrance_fee,fare_section['operator'])
 
-            #Valleilijn fare calculation, x min_distance and then if (distance-min_distance) > 0 (distance-min_distance)*km_price
-            if fareunits_passed == 0 and min_distance is not None and min_fare is not None: 
-               section_distance = max(section_distance-min_distance+1,0)
-               x,min_fare = unitprice(min_distance)
-               section_second += min_fare
-               section_first  += int(min_fare*1.7)
-            #Set fare-distance to min_distance
-            elif distance+fareunits_passed < min_distance:
-                section_distance = min_distance
+            passed_first,passed_second = passed_fare
+            print (distance+fareunits_passed,full_second)
+            print (fareunits_passed,passed_second)
+            section_first,section_second = full_first-passed_first,full_second-passed_second
 
-            if kmprice_first is None:
-                kmprice_first = kmprice_second
-            section_first  += magic_round(compute_total_km_fare(kmprice_first,section_distance,fareunits_passed),fare_section['operator'])
-            section_second += magic_round(compute_total_km_fare(kmprice_second,section_distance,fareunits_passed),fare_section['operator'])
-
-            if i == len(journey['faresections']) - 1:
-                full_second = compute_total_km_fare(kmprice_second,section_distance+fareunits_passed,0)
-                if full_second < section_second + price_second:
-                    section_second = max(0,magic_round(full_second - price_second,fare_section['operator']))
-                full_first = compute_total_km_fare(kmprice_first,section_distance+fareunits_passed,0)
-                if full_first < section_first + price_first:
-                    section_first = max(0,magic_round(full_first - price_first,fare_section['operator']))
-
-            fare_section['price_first'] = section_first
-            fare_section['price_second'] = section_second
-
-        fareunits_passed += fare_section['fare_distance']
+        fare_section['price_first'],fare_section['price_second'] = section_first,section_second
+        fareunits_passed += distance
         price_first += fare_section['price_first']
         price_second += fare_section['price_second']
     journey['fare_distance'] = fareunits_passed

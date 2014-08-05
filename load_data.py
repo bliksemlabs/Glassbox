@@ -62,7 +62,8 @@ fareunits boolean,
 price_second float,
 price_first float,
 entrance_fee float,
-min_fare integer
+min_fare integer,
+calc_method TEXT
 );""")
 c.execute("CREATE INDEX concession_idx ON concession(concession);")
 for line in open('prices.csv'):
@@ -70,7 +71,7 @@ for line in open('prices.csv'):
     for i,v in enumerate(values):
         if v == 'NULL':
             values[i] = None
-    c.execute("INSERT INTO concession VALUES (?,?,?,?,?,?)",values)
+    c.execute("INSERT INTO concession VALUES (?,?,?,?,?,?,?)",values)
 
 #SET CONCESSIONS
 c.execute("ALTER TABLE distance ADD COLUMN concession TEXT")
@@ -123,7 +124,7 @@ c.execute("""
 UPDATE distance set concession  = 'VALLEI' WHERE operator = 'CXX' and (from_station = 'bnc' or to_station = 'bnc');""")
 c.execute("""UPDATE distance set concession  = 'VALLEI' WHERE operator = 'CXX' and to_station in 
 (SELECT DISTINCT to_station  FROM distance WHERE operator = 'CXX' and from_station = 'bnc');""")
-c.execute("""UPDATE distance set min_distance = 9 WHERE concession = 'VALLEI';""")
+c.execute("""UPDATE distance set min_distance = 8 WHERE concession = 'VALLEI';""")
 
 #Syntus ZOH
 c.execute("""
