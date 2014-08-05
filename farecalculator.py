@@ -73,7 +73,7 @@ WHERE from_station = ? AND to_station = ? AND operator = ?; """,(fare_section['f
 
 #Return the LAK discount factor for the distance given
 def lak_factor(distance,operator):
-    if operator == 'VTN':
+    if operator in ['VTN','CXX']:
         if distance <= 40:
             return 1
         elif distance <= 80:
