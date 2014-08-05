@@ -135,7 +135,10 @@ def calculate_fare(journey):
     price_second = 0
     price_first = 0
     for i,fare_section in enumerate(journey['faresections']):
-        fare_unit,distance,price_1stfull,price_2ndfull,kmprice_first,kmprice_second,entrance_free,min_fare,min_distance,concession = fare_for_section(fare_section)
+        fare = fare_for_section(fare_section)
+        if fare is None:
+            print fare_section #Debug print
+        fare_unit,distance,price_1stfull,price_2ndfull,kmprice_first,kmprice_second,entrance_free,min_fare,min_distance,concession = fare
         fare_section['fare_distance'] = distance
         if fare_unit:
             if i != 0:
@@ -148,30 +151,43 @@ def calculate_fare(journey):
                 fare_section['price_second'] = price_2ndfull
         else:
             section_distance = distance
+            
+            section_first = 0
+            section_second = 0
 
             if i==0 and min_fare is None:
-                fare_section['price_first'] = entrance_free
-                fare_section['price_second'] = entrance_free
-            else:
-                fare_section['price_first'] = 0
-                fare_section['price_second'] = 0
+                section_first  += entrance_free
+                section_second += entrance_free
 
-            if fareunits_passed == 0 and min_distance is not None and min_fare is not None: #Valleilijn hack, and how the F# is this portable to first class?
+            #Valleilijn fare calculation, x min_distance and then if (distance-min_distance) > 0 (distance-min_distance)*km_price
+            if fareunits_passed == 0 and min_distance is not None and min_fare is not None: 
                section_distance = max(section_distance-min_distance+1,0)
                x,min_fare = unitprice(min_distance)
-               fare_section['price_second'] += min_fare
-               fare_section['price_first'] += int(min_fare*1.7)
+               section_second += min_fare
+               section_first  += int(min_fare*1.7)
+            #Set fare-distance to min_distance
             elif distance+fareunits_passed < min_distance:
                 section_distance = min_distance
+
             if kmprice_first is None:
                 kmprice_first = kmprice_second
-            fare_section['price_first']  += magic_round(compute_total_km_fare(kmprice_first,section_distance,fareunits_passed),fare_section['operator'])
-            fare_section['price_second'] += magic_round(compute_total_km_fare(kmprice_second,section_distance,fareunits_passed),fare_section['operator'])
+            section_first  += magic_round(compute_total_km_fare(kmprice_first,section_distance,fareunits_passed),fare_section['operator'])
+            section_second += magic_round(compute_total_km_fare(kmprice_second,section_distance,fareunits_passed),fare_section['operator'])
+
+            if i == len(journey['faresections']) - 1:
+                full_second = compute_total_km_fare(kmprice_second,section_distance+fareunits_passed,0)
+                if full_second < section_second + price_second:
+                    section_second = max(0,magic_round(full_second - price_second,fare_section['operator']))
+                full_first = compute_total_km_fare(kmprice_first,section_distance+fareunits_passed,0)
+                if full_first < section_first + price_first:
+                    section_first = max(0,magic_round(full_first - price_first,fare_section['operator']))
+
+            fare_section['price_first'] = section_first
+            fare_section['price_second'] = section_second
 
         fareunits_passed += fare_section['fare_distance']
         price_first += fare_section['price_first']
         price_second += fare_section['price_second']
-
     journey['fare_distance'] = fareunits_passed
     journey['price_second'] = price_second
     journey['price_first'] = price_first
