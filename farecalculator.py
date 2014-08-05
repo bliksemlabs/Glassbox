@@ -101,16 +101,18 @@ def compute_km_fare(km_price,distance,units_passed):
             continue
         fare += lak_factor(stage_ceiling)*km_price*min(capacity,distance)
         distance -= min(capacity,distance)
-        units_passed += min(capacity,distance)
+        units_passed += capacity
     #Above 250 free
     return fare
+
+compute_km_fare(17.1,106,0)
 
 def round_op(price,operator):
     if operator == 'ARR':
         return int(price)
     return int(round(price))
 
-def fare_for_distance(distance,fareunits_passed,calc_method,km_price_first,km_price_second,min_distance,min_fare,entrance_rate,operator):
+def fare_for_distance(distance,fareunits_passed,calc_method,km_price_first,km_price_second,min_distance,min_fare,entrance_rate):
     if calc_method == 'TE':
         c = db.cursor()
         c.execute("SELECT price_1stfull,price_2ndfull FROM fareunit_price WHERE distance = ? OR (? > 250 AND distance = 250)",(distance,)*2)
@@ -122,10 +124,12 @@ def fare_for_distance(distance,fareunits_passed,calc_method,km_price_first,km_pr
     elif calc_method == 'EASY_TRIP':
         distance = max(min_distance,distance)
 
+        if km_price_first is None:
+            km_price_first = 1.7*km_price_second
         price_first = entrance_rate + compute_km_fare(km_price_first,distance,fareunits_passed)
         price_second = entrance_rate + compute_km_fare(km_price_second,distance,fareunits_passed)
 
-        return (round_op(price,operator) for price in (price_first,price_second))
+        return (price_first,price_second)
     elif calc_method == 'MIN_FARE': #Used on Valleilijn First x kilometers account for price y, rest (distance-x)*km_price
         price_first,price_second = 0,0
         
@@ -133,9 +137,9 @@ def fare_for_distance(distance,fareunits_passed,calc_method,km_price_first,km_pr
         price_first  += int(min_fare*1.7)
         distance = max(0,distance-min_distance)
         
-        price_second += distance * km_price_second
-        price_first += distance * km_price_first
-        return (round_op(price,operator) for price in (price_first,price_second))
+        price_second += compute_km_fare(km_price_second,distance,8)
+        price_first += compute_km_fare(km_price_first,distance,8)
+        return (price_first,price_second)
     else:
         raise Exception("Unknown calculation method %s" % (calc_method))
 
@@ -156,26 +160,25 @@ def calculate_fare(journey):
        
         full_fare = fare_for_distance(distance+fareunits_passed,0,calc_method,
                                       kmprice_first,kmprice_second,min_distance,
-                                      min_fare,entrance_fee,fare_section['operator'])
+                                      min_fare,entrance_fee)
         if full_fare is None:
            raise Exception('FARE NOT FOUND')
         full_first,full_second = full_fare
-        section_first,section_second = full_first,full_second
+        section_first,section_second = (round_op(price,fare_section['operator']) for price in (full_first,full_second))
 
         if i > 0:
             passed_fare = fare_for_distance(fareunits_passed,0,calc_method,
                                             kmprice_first,kmprice_second,min_distance,
-                                            min_fare,entrance_fee,fare_section['operator'])
+                                            min_fare,entrance_fee)
 
             passed_first,passed_second = passed_fare
-            print (distance+fareunits_passed,full_second)
-            print (fareunits_passed,passed_second)
-            section_first,section_second = full_first-passed_first,full_second-passed_second
+            section_first,section_second = (round_op(price,fare_section['operator']) for price in (full_first-passed_first,full_second-passed_second))
 
         fare_section['price_first'],fare_section['price_second'] = section_first,section_second
         fareunits_passed += distance
         price_first += fare_section['price_first']
         price_second += fare_section['price_second']
+        fare_section['fare_distance'] = distance
     journey['fare_distance'] = fareunits_passed
     journey['price_second'] = price_second
     journey['price_first'] = price_first
