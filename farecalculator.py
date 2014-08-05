@@ -73,11 +73,11 @@ WHERE from_station = ? AND to_station = ? AND operator = ?; """,(fare_section['f
 
 #Return the LAK discount factor for the distance given
 def lak_factor(distance,operator):
-    if operator in ['VTN','CXX']:
+    if operator in ['VTN']:
         if distance <= 40:
             return 1
         elif distance <= 80:
-            return 0.9680
+            return 0.968
         elif distance <= 100:
             return 0.8470
         elif distance <= 120:
@@ -96,7 +96,7 @@ def lak_factor(distance,operator):
         elif distance <= 80:
             return 0.97
         elif distance <= 100:
-            return 0.88
+            return 0.87
         elif distance <= 120:
             return 0.7
         elif distance <= 150:
@@ -110,6 +110,7 @@ def lak_factor(distance,operator):
 
 #Compute the total fare using KM price, using LAK distance stages
 def compute_km_fare(km_price,distance,units_passed,operator):
+    #print 'xxx'
     fare = 0.0
     for stage_ceiling in [40,80,100,120,150,200,250]:
         if distance == 0:
@@ -117,6 +118,7 @@ def compute_km_fare(km_price,distance,units_passed,operator):
         capacity = stage_ceiling - units_passed
         if capacity < 0:
             continue
+        #print ' * '.join(str(x) for x in (lak_factor(stage_ceiling,operator),km_price,min(capacity,distance)))
         fare += lak_factor(stage_ceiling,operator)*km_price*min(capacity,distance)
         distance -= min(capacity,distance)
         units_passed += capacity
