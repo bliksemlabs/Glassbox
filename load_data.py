@@ -12,13 +12,14 @@ c = db.cursor()
 
 c.execute("CREATE TABLE distance ( from_station TEXT, to_station TEXT, distance integer, operator TEXT, min_distance integer);")
 c.execute("CREATE index distance_idx ON DISTANCE (from_station,to_station);")
-for line in open('distance.csv'):
+for line in open('data/distance.csv'):
     values = line[:-1].split(',')
     c.execute("INSERT INTO distance (from_station,to_station, distance, operator) VALUES (?,?,?,?)",values)
 
 c.execute(
 """
 CREATE TABLE fareunit_price (
+key TEXT,
 distance integer,
 price_2ndfull integer,
 price_2nd20 integer,
@@ -28,31 +29,20 @@ price_1st20 integer,
 price_1st40 integer
 );""")
 c.execute("CREATE INDEX fareunit_price_idx on fareunit_price(distance);")
-for line in open('unitprices.csv'):
-    values = line[:-1].split(',')
-    for i,v in enumerate(values):
-        if v == 'NULL':
-            values[i] = None
-    c.execute("INSERT INTO fareunit_price VALUES (?,?,?,?,?,?,?)",values)
+c.execute("CREATE INDEX fareunit_price_keydist_idx on fareunit_price(key,distance);")
+def load_unitprices(filename,key):
+    for line in open(filename):
+        values = line[:-1].split(',')
+        for i,v in enumerate(values):
+            if v == 'NULL' or v == '':
+                values[i] = None
+        c.execute("INSERT INTO fareunit_price VALUES (?,?,?,?,?,?,?,?)",[key,]+values)
 
-c.execute(
-"""
-CREATE TABLE arr_fareunit_price (
-distance integer,
-price_2ndfull integer,
-price_2nd20 integer,
-price_2nd40 integer,
-price_1stfull integer,
-price_1st20 integer,
-price_1st40 integer
-);""")
-c.execute("CREATE INDEX arr_fareunit_price_idx on arr_fareunit_price(distance);")
-for line in open('arr_unitprices.csv'):
-    values = line[:-1].split(',')
-    for i,v in enumerate(values):
-        if v == 'NULL':
-            values[i] = None
-    c.execute("INSERT INTO arr_fareunit_price VALUES (?,?,?,?,?,?,?)",values)
+load_unitprices('data/ns_unitprices.csv',"NS")
+load_unitprices('data/nn_unitprices.csv',"NN")
+load_unitprices('data/vd_unitprices.csv',"VD")
+load_unitprices('data/mll_unitprices.csv',"MLL")
+load_unitprices('data/ge_unitprices.csv',"GE")
 
 c.execute(
 """
@@ -63,15 +53,16 @@ price_second float,
 price_first float,
 entrance_fee float,
 min_fare integer,
-calc_method TEXT
+calc_method TEXT,
+unit_price_key TEXT
 );""")
 c.execute("CREATE INDEX concession_idx ON concession(concession);")
-for line in open('prices.csv'):
+for line in open('data/prices.csv'):
     values = line[:-1].split(',')
     for i,v in enumerate(values):
         if v == 'NULL':
             values[i] = None
-    c.execute("INSERT INTO concession VALUES (?,?,?,?,?,?,?)",values)
+    c.execute("INSERT INTO concession VALUES (?,?,?,?,?,?,?,?)",values)
 
 #SET CONCESSIONS
 c.execute("ALTER TABLE distance ADD COLUMN concession TEXT")
@@ -84,10 +75,10 @@ UPDATE distance set concession  = 'NOORD' WHERE operator = 'ARR' and (from_stati
 c.execute("""UPDATE distance set concession  = 'NOORD' WHERE operator = 'ARR' and to_station in 
 (SELECT DISTINCT to_station  FROM distance WHERE operator = 'ARR' and from_station = 'lw');""")
 
-#Zwolle - Emmen Arriva
+#Vechtdallijnen Arriva
 c.execute("""
-UPDATE distance set concession  = 'ARR_ZL_EMN' WHERE operator = 'ARR' and (from_station = 'emn' or to_station = 'emn');""")
-c.execute("""UPDATE distance set concession  = 'ARR_ZL_EMN' WHERE operator = 'ARR' and to_station in 
+UPDATE distance set concession  = 'ARR_VD' WHERE operator = 'ARR' and (from_station = 'emn' or to_station = 'emn');""")
+c.execute("""UPDATE distance set concession  = 'ARR_VD' WHERE operator = 'ARR' and to_station in 
 (SELECT DISTINCT to_station  FROM distance WHERE operator = 'ARR' and from_station = 'emn');""")
 
 #Zutphen - Apeldoorn Arriva
