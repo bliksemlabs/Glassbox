@@ -129,7 +129,6 @@ def round_op(price,operator,concession):
 
 def fare_for_distance(distance,fareunits_passed,calc_method,km_price_first,km_price_second,min_distance,min_fare,entrance_rate,operator,concession,unit_key):
     if calc_method == 'TE':
-        distance = max(1,distance) # Shared fare-points are distance 1
         c = db.cursor()
         c.execute("SELECT price_1stfull,price_2ndfull FROM fareunit_price WHERE key = ? AND (distance = ? OR (? > 250 AND distance = 250))",(unit_key,distance,distance))
         return c.fetchone()
