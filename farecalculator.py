@@ -72,7 +72,7 @@ WHERE from_station = ? AND to_station = ? AND operator = ?; """,(fare_section['f
     return res[0]
 
 #Return the LAK discount factor for the distance given
-def lak_factor(distance,operator,concession):
+def lak_factor(distance,operator):
     if operator in ['VTN']:
         if distance <= 40:
             return 1
@@ -109,7 +109,7 @@ def lak_factor(distance,operator,concession):
             return 0
 
 #Compute the total fare using KM price, using LAK distance stages
-def compute_km_fare(km_price,distance,units_passed,operator,concession):
+def compute_km_fare(km_price,distance,units_passed,operator):
     fare = 0.0
     for stage_ceiling in [40,80,100,120,150,200,250]:
         if distance == 0:
@@ -118,16 +118,16 @@ def compute_km_fare(km_price,distance,units_passed,operator,concession):
         if capacity < 0:
             continue
         #print ' * '.join(str(x) for x in (lak_factor(stage_ceiling,operator,concession),km_price,min(capacity,distance)))
-        fare += lak_factor(stage_ceiling,operator,concession)*km_price*min(capacity,distance)
+        fare += lak_factor(stage_ceiling,operator)*km_price*min(capacity,distance)
         distance -= min(capacity,distance)
         units_passed += capacity
     #Above 250 free
     return fare
 
-def round_op(price,operator,concession):
+def round_op(price):
     return int(round(price))
 
-def fare_for_distance(distance,fareunits_passed,calc_method,km_price_first,km_price_second,min_distance,min_fare,entrance_rate,operator,concession,unit_key):
+def fare_for_distance(distance,fareunits_passed,calc_method,km_price_first,km_price_second,min_distance,min_fare,entrance_rate,operator,unit_key):
     if calc_method == 'TE':
         c = db.cursor()
         c.execute("SELECT price_1stfull,price_2ndfull FROM fareunit_price WHERE key = ? AND (distance = ? OR (? > 250 AND distance = 250))",(unit_key,distance,distance))
@@ -137,8 +137,8 @@ def fare_for_distance(distance,fareunits_passed,calc_method,km_price_first,km_pr
 
         if km_price_first is None:
             km_price_first = 1.7*km_price_second
-        price_first = entrance_rate + compute_km_fare(km_price_first,distance,fareunits_passed,operator,concession)
-        price_second = entrance_rate + compute_km_fare(km_price_second,distance,fareunits_passed,operator,concession)
+        price_first = entrance_rate + compute_km_fare(km_price_first,distance,fareunits_passed,operator)
+        price_second = entrance_rate + compute_km_fare(km_price_second,distance,fareunits_passed,operator)
 
         return (price_first,price_second)
     elif calc_method == 'MIN_FARE': #Used on Valleilijn First x kilometers account for price y, rest (distance-x)*km_price
@@ -148,8 +148,8 @@ def fare_for_distance(distance,fareunits_passed,calc_method,km_price_first,km_pr
         price_first  += int(min_fare*1.7)
         distance = max(0,distance-min_distance)
         
-        price_second += compute_km_fare(km_price_second,distance,8,operator,concession)
-        price_first += compute_km_fare(km_price_first,distance,8,operator,concession)
+        price_second += compute_km_fare(km_price_second,distance,8,operator)
+        price_first += compute_km_fare(km_price_first,distance,8,operator)
         return (price_first,price_second)
     else:
         raise Exception("Unknown calculation method %s" % (calc_method))
@@ -171,19 +171,18 @@ def calculate_fare(journey):
        
         full_fare = fare_for_distance(distance+fareunits_passed,0,calc_method,
                                       kmprice_first,kmprice_second,min_distance,
-                                      min_fare,entrance_fee,fare_section['operator'],concession,unit_key)
+                                      min_fare,entrance_fee,fare_section['operator'],unit_key)
         if full_fare is None:
            raise Exception('FARE NOT FOUND')
         full_first,full_second = full_fare
-        section_first,section_second = (round_op(price,fare_section['operator'],concession) for price in (full_first,full_second))
+        section_first,section_second = (round_op(price) for price in (full_first,full_second))
 
         if i > 0:
             passed_fare = fare_for_distance(fareunits_passed,0,calc_method,
                                             kmprice_first,kmprice_second,min_distance,
-                                            min_fare,entrance_fee,fare_section['operator'],concession,unit_key)
-
+                                            min_fare,entrance_fee,fare_section['operator'],unit_key)
             passed_first,passed_second = passed_fare
-            section_first,section_second = (round_op(price,fare_section['operator'],concession) for price in (max(0,full_first-passed_first),max(0,full_second-passed_second)))
+            section_first,section_second = (round_op(price) for price in (max(0,full_first-passed_first),max(0,full_second-passed_second)))
 
         fare_section['price_first'],fare_section['price_second'] = section_first,section_second
         fareunits_passed += distance

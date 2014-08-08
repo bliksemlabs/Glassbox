@@ -39,7 +39,7 @@ def calculate_journey(from_station,to_station):
            reisstops = reisdeel.findall(".//ReisStop")
            section = {'fromStation' : station_abbrv[reisstops[0].find('Naam').text].lower(),
                       'toStation'   : station_abbrv[reisstops[-1].find('Naam').text].lower(),
-                      'operator'    : reisdeel.find('Vervoerder').text.replace('Arriva','ARR').replace('Syntus','SYNTUS').replace('Valleilijn','CXX').replace('NS International','NS').replace('GVB','NS').replace('R-net','NS').replace('Breng','BRENG').replace('NMBS','NS').replace('Veolia','VTN')}
+                      'operator'    : reisdeel.find('Vervoerder').text.replace('Arriva','ARR').replace('Syntus','SYNTUS').replace('Valleilijn','CXX').replace('NS International','NS').replace('GVB','NS').replace('R-net','NS').replace('Breng','BRENG').replace('DB','NS').replace('NMBS','NS').replace('Veolia','VTN')}
            journey['sections'].append(section)
         fare = calculate_fare(journey)
         if str(fare['faresections']) in fare_sections_printed:
