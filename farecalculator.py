@@ -90,6 +90,23 @@ def lak_factor(distance,operator):
             return 0.15
         elif distance > 250:
             return 0
+    elif operator in ['CXX','ARR']:
+        if distance <= 40:
+            return 1
+        elif distance <= 80:
+            return 0.967
+        elif distance <= 100:
+            return 0.87
+        elif distance <= 120:
+            return 0.702
+        elif distance <= 150:
+            return 0.48
+        elif distance <= 200:
+            return 0.4
+        elif distance <= 250:
+            return 0.15
+        elif distance > 250:
+            return 0
     else:
         if distance <= 40:
             return 1
