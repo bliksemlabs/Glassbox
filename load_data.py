@@ -43,6 +43,7 @@ load_unitprices('data/nn_unitprices.csv',"NN")
 load_unitprices('data/vd_unitprices.csv',"VD")
 load_unitprices('data/mll_unitprices.csv',"MLL")
 load_unitprices('data/ge_unitprices.csv',"GE")
+load_unitprices('data/zoh_unitprices.csv',"SYNTUS_ZOH")
 
 c.execute(
 """
